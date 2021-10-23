@@ -1,5 +1,5 @@
 use crate::logging::LogError;
-use crate::model::{Channel, Message};
+use crate::model::{Channel, Message, Subscription};
 use crate::server_state::ServerState;
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, TypedHeader};
@@ -21,6 +21,9 @@ use tiny_firestore_odm::{Collection, NamedDocument};
 use tokio_stream::StreamExt;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
+
+const MESSAGES_COLLECTION: &str = "messages";
+const SUBSCRIPTIONS_TABLE: &str = "subscriptions";
 
 #[derive(Serialize)]
 struct VapidResult {
@@ -85,7 +88,7 @@ async fn info(
     let channels = db.channels();
     let channel = channels.get(&*channel_id).await.log_error_not_found()?;
 
-    let messages: Collection<Message> = channels.subcollection(&channel_id, "messages");
+    let messages: Collection<Message> = channels.subcollection(&channel_id, MESSAGES_COLLECTION);
 
     let messages = messages
         .list()
@@ -120,7 +123,7 @@ async fn send(
     let channels = db.channels();
     channels.get(&*channel_id).await.log_error_not_found()?;
 
-    let messages: Collection<Message> = channels.subcollection(&channel_id, "messages");
+    let messages: Collection<Message> = channels.subcollection(&channel_id, MESSAGES_COLLECTION);
 
     messages
         .create(&Message {
@@ -157,6 +160,21 @@ async fn subscribe(
     server_state: Extension<ServerState>,
     Path(channel_id): Path<String>,
 ) -> Result<String, StatusCode> {
+    let db = server_state.db().await.log_error_internal()?;
+
+    let channels = db.channels();
+    channels.get(&*channel_id).await.log_error_not_found()?;
+
+    let subscriptions: Collection<Subscription> = channels.subcollection(&channel_id, SUBSCRIPTIONS_TABLE);
+
+    let subscription_id = subscription.id.clone();
+
+    subscriptions.try_create(&Subscription {
+        endpoint: subscription.0.subscription.endpoint,
+        auth: subscription.0.subscription.keys.auth,
+        p256dh: subscription.0.subscription.keys.p256dh,
+    }, &*subscription_id).await.log_error_internal()?;
+
     Ok("".to_string())
 }
 
