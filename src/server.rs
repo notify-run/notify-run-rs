@@ -1,15 +1,26 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
-use deadpool::managed;
-use google_authz::TokenSource;
-use serde::Serialize;
-use axum::{Json, Router, extract::Path, handler::get, http::{StatusCode}};
-use tiny_firestore_odm::{Collection, Database};
-use async_trait::async_trait;
-use crate::{get_creds_and_project, model::Channel};
-
-async fn status() -> &'static str {
-    "ok"
-}
+use crate::logging::LogError;
+use crate::model::{Channel, Message};
+use crate::server_state::ServerState;
+use axum::body::{Body, Bytes};
+use axum::extract::{ConnectInfo, TypedHeader};
+use axum::routing::BoxRoute;
+use axum::service;
+use axum::{
+    extract::{Extension, Path},
+    handler::{get, post},
+    http::StatusCode,
+    AddExtensionLayer, Json, Router,
+};
+use chrono::{DateTime, Utc};
+use headers::{HeaderMap, HeaderName, HeaderValue, UserAgent};
+use qrcode::render::svg;
+use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use tiny_firestore_odm::{Collection, NamedDocument};
+use tokio_stream::StreamExt;
+use tower_http::services::ServeDir;
+use tower_http::services::ServeFile;
 
 #[derive(Serialize)]
 struct VapidResult {
@@ -23,77 +34,170 @@ struct VapidResult {
 struct MessageInfo {
     message: String,
     result: Vec<VapidResult>,
+    time: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
 struct ChannelInfo {
-    #[serde(rename="channelId")]
+    #[serde(rename = "channelId")]
     channel_id: String,
 
     messages: Vec<MessageInfo>,
 
     time: String,
+
+    #[serde(rename = "pubKey")]
+    pub_key: String,
 }
 
-async fn info(Path(channel_id): Path<String>) -> Result<Json<ChannelInfo>, StatusCode> {
+async fn register_channel(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    TypedHeader(user_agent): TypedHeader<UserAgent>,
+    server_state: Extension<ServerState>,
+) -> Result<Json<ChannelInfo>, StatusCode> {
+    let db = server_state.db().await.log_error_internal()?;
+    let ip: String = addr.ip().to_string();
+
+    let channels = db.channels();
+    let channel_id = channels
+        .create(&Channel {
+            created: Utc::now(),
+            created_agent: user_agent.to_string(),
+            created_ip: ip,
+        })
+        .await
+        .log_error_internal()?;
+
     Ok(Json(ChannelInfo {
-        channel_id,
+        channel_id: channel_id.leaf_name().to_string(),
         messages: Vec::new(),
         time: "".to_string(),
+        pub_key: server_state.vapid_pubkey.to_string(),
     }))
 }
 
-struct NotifyDatabase {
-    db: Database,
+async fn info(
+    server_state: Extension<ServerState>,
+    Path(channel_id): Path<String>,
+) -> Result<Json<ChannelInfo>, StatusCode> {
+    let db = server_state.db().await.log_error_internal()?;
+
+    let channels = db.channels();
+    let channel = channels.get(&*channel_id).await.log_error_not_found()?;
+
+    let messages: Collection<Message> = channels.subcollection(&channel_id, "messages");
+
+    let messages = messages
+        .list()
+        .with_order_by("message_time desc")
+        .with_page_size(10)
+        .get_page()
+        .await;
+
+    Ok(Json(ChannelInfo {
+        channel_id,
+        messages: messages
+            .into_iter()
+            .map(|d| MessageInfo {
+                message: d.value.message,
+                result: Vec::new(),
+                time: d.value.message_time,
+            })
+            .collect(),
+        time: "".to_string(),
+        pub_key: server_state.vapid_pubkey.to_string(),
+    }))
 }
 
-impl NotifyDatabase {
-    pub fn channels(&self) -> Collection<Channel> {
-        self.db.collection("channels")
-    }
+async fn send(
+    server_state: Extension<ServerState>,
+    Path(channel_id): Path<String>,
+    message: String,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<String, StatusCode> {
+    let db = server_state.db().await.log_error_internal()?;
+
+    let channels = db.channels();
+    channels.get(&*channel_id).await.log_error_not_found()?;
+
+    let messages: Collection<Message> = channels.subcollection(&channel_id, "messages");
+
+    messages
+        .create(&Message {
+            message,
+            message_time: Utc::now(),
+            sender_ip: addr.ip().to_string(),
+        })
+        .await
+        .log_error_internal()?;
+
+    Ok("ok".to_string())
 }
 
-struct NotifyDatabaseManager {
-    token_source: Arc<TokenSource>,
-    project_id: String,
+#[derive(Deserialize)]
+struct SubscriptionRequestKeys {
+    auth: String,
+    p256dh: String,
 }
 
-impl NotifyDatabaseManager {
-    pub fn new(token_source: Arc<TokenSource>, project_id: &str) -> Self {
-        NotifyDatabaseManager { token_source, project_id: project_id.to_string() }
-    }
+#[derive(Deserialize)]
+struct SubscriptionRequestSubscription {
+    endpoint: String,
+    keys: SubscriptionRequestKeys,
 }
 
-#[async_trait]
-impl managed::Manager for NotifyDatabaseManager {
-    type Type = NotifyDatabase;
-    type Error = Infallible;
-    
-    async fn create(&self) -> Result<NotifyDatabase, Infallible> {
-        let db = Database::new(self.token_source, &self.project_id).await;
-
-        Ok(NotifyDatabase { db })
-    }
-    
-    async fn recycle(&self, _: &mut NotifyDatabase) -> managed::RecycleResult<Infallible> {
-        Ok(())
-    }
+#[derive(Deserialize)]
+struct SubscriptionRequest {
+    id: String,
+    subscription: SubscriptionRequestSubscription,
 }
 
-struct ServerState {
-    pool: deadpool::managed::Pool<NotifyDatabaseManager>,
+async fn subscribe(
+    subscription: Json<SubscriptionRequest>,
+    server_state: Extension<ServerState>,
+    Path(channel_id): Path<String>,
+) -> Result<String, StatusCode> {
+    Ok("".to_string())
 }
 
-impl ServerState {
-    pub async fn new() -> Self {
-        let (token_source, project_id) = get_creds_and_project().await;
-        let manager = NotifyDatabaseManager::new(token_source, &project_id);
-        let pool = deadpool::managed::Pool::<NotifyDatabaseManager>::builder(manager).build().unwrap();
-        
-        ServerState {
-            pool
-        }
-    }
+async fn render_qr_code(
+    server_state: Extension<ServerState>,
+    Path(channel_id): Path<String>,
+) -> (HeaderMap, Bytes) {
+    // TODO: generate actual URL
+
+    let img: String = qrcode::QrCode::new(b"blahblah")
+        .unwrap()
+        .render()
+        .min_dimensions(200, 200)
+        .dark_color(svg::Color("#000000"))
+        .light_color(svg::Color("#ffffff"))
+        .build();
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static("content-type"),
+        HeaderValue::from_static("image/svg+xml"),
+    );
+
+    let b = Bytes::from(img);
+
+    (headers, b)
+}
+
+fn static_routes() -> Router<BoxRoute> {
+    Router::new()
+        .nest(
+            "/",
+            service::get(ServeDir::new("notify-run-site/public/"))
+                .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
+        )
+        .nest(
+            "/c/:channel_id",
+            service::get(ServeFile::new("notify-run-site/public/channel.html"))
+                .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
+        )
+        .boxed()
 }
 
 pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
@@ -105,15 +209,21 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
         8080
     };
 
+    let server_state = ServerState::new().await;
+
     let app = Router::new()
-        .route("/", get(status))
+        .nest("/", static_routes())
         .route("/:channel_id/json", get(info))
-        ;
+        .route("/:channel_id/subscribe", post(subscribe))
+        .route("/:channel_id/qr.svg", get(render_qr_code))
+        .route("/api/register_channel", post(register_channel))
+        .route("/:channel_id", post(send))
+        .layer(AddExtensionLayer::new(server_state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr, _>())
         .await?;
 
     Ok(())

@@ -1,26 +1,26 @@
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf};
 use anyhow::Result;
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
+use std::{collections::HashMap, fs::read_to_string, path::PathBuf};
 use tiny_firestore_odm::{Collection, Database};
 
 use crate::model::Channel;
 
 #[derive(Deserialize)]
 struct DynamoExport {
-    #[serde(rename="Items")]
+    #[serde(rename = "Items")]
     items: Vec<Item>,
 }
 
 #[derive(Deserialize)]
 struct DynamoString {
-    #[serde(rename="S")]
+    #[serde(rename = "S")]
     value: String,
 }
 
 #[derive(Deserialize)]
 struct DynamoValue<T> {
-    #[serde(rename="M")]
+    #[serde(rename = "M")]
     value: T,
 }
 
@@ -45,7 +45,7 @@ struct ChannelMeta {
 #[derive(Deserialize)]
 struct Item {
     created: DynamoString,
-    #[serde(rename="channelId")]
+    #[serde(rename = "channelId")]
     channel_id: DynamoString,
     subscriptions: DynamoValue<HashMap<String, DynamoValue<Subscription>>>,
     meta: DynamoValue<ChannelMeta>,
@@ -61,9 +61,10 @@ pub async fn migrate(path: PathBuf, db: Database) -> Result<()> {
     for (index, item) in migrate.items.into_iter().enumerate() {
         let channel_id = item.channel_id.value;
         let _span = tracing::info_span!("Channel", %channel_id).entered();
-        let created_naive = NaiveDateTime::parse_from_str(&item.created.value, "%Y-%m-%d %H:%M:%S.%f")?;
+        let created_naive =
+            NaiveDateTime::parse_from_str(&item.created.value, "%Y-%m-%d %H:%M:%S.%f")?;
         let created = Utc.from_utc_datetime(&created_naive);
-        
+
         let channel = Channel {
             created,
             created_agent: item.meta.value.agent.value,
@@ -76,7 +77,8 @@ pub async fn migrate(path: PathBuf, db: Database) -> Result<()> {
 
         for (subscription_id, subscription) in item.subscriptions.value {
             let _span = tracing::info_span!("Subscription", %subscription_id).entered();
-            let subscriptions: Collection<crate::model::Subscription> = channels.subcollection(&channel_id, "susbcriptions");
+            let subscriptions: Collection<crate::model::Subscription> =
+                channels.subcollection(&channel_id, "susbcriptions");
 
             let sub = crate::model::Subscription {
                 endpoint: subscription.value.endpoint.value,
