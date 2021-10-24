@@ -5,7 +5,6 @@ import { QuickStartFlow } from './quickstart/quickstart_flow';
 import { ChannelPage } from './channel';
 
 window.addEventListener('load', () => {
-    /*
     let quickstartContainer = document.getElementById('quickstart');
     if (quickstartContainer) {
         ReactDOM.render(
@@ -13,7 +12,6 @@ window.addEventListener('load', () => {
             quickstartContainer
         );
     }
-    */
 
     let match = document.location.pathname.match('/c/(.+)');
     if (match) {
