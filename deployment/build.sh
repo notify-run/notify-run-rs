@@ -1,5 +1,7 @@
 #!/bin/sh
 
+gcloud auth list
+
 # Sync down -------------------------------
 gsutil cp \
     gs://notify-run-build-cache/target.tar.gz \
