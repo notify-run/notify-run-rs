@@ -7,3 +7,6 @@ endif
 
 serve:
 	cargo run -- serve
+
+ngrok:
+	ngrok http --subdomain=notify 8080

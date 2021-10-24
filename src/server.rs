@@ -182,9 +182,9 @@ async fn render_qr_code(
     server_state: Extension<ServerState>,
     Path(channel_id): Path<String>,
 ) -> (HeaderMap, Bytes) {
-    // TODO: generate actual URL
+    let url = format!("{}/c/{}", server_state.server_base, channel_id);
 
-    let img: String = qrcode::QrCode::new(b"blahblah")
+    let img: String = qrcode::QrCode::new(url.as_bytes())
         .unwrap()
         .render()
         .min_dimensions(200, 200)
