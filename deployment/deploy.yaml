@@ -1,0 +1,22 @@
+steps:
+  - name: 'gcr.io/kaniko-project/executor:v1.6.0'
+    args:
+      - '--dockerfile=containers/server.Dockerfile'
+      - '--destination=gcr.io/notify-run/server:$COMMIT_SHA'
+      - '--cache=true'
+      - '--cache-ttl=336h'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    args:
+      - run
+      - services
+      - update
+      - server
+      - '--platform=managed'
+      - '--image=gcr.io/notify-run/server:$COMMIT_SHA'
+      - '--region=us-east4'
+      - '--quiet'
+    id: Deploy
+    entrypoint: gcloud
+timeout: 3000s
+options:
+  machineType: E2_HIGHCPU_8
