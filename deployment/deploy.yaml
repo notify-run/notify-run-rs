@@ -10,7 +10,7 @@ steps:
       - run
       - services
       - update
-      - server
+      - new-notify-run-server
       - '--platform=managed'
       - '--image=gcr.io/notify-run/server:$COMMIT_SHA'
       - '--region=us-east4'
