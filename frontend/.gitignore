@@ -1,0 +1,7 @@
+public
+static
+.env
+dist
+tracker.html
+node_modules
+.vscode
