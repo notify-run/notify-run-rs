@@ -13,9 +13,9 @@ cargo build --release
 
 # Sync up ---------------------------------
 tar -zcf target.tar.gz target
-gsutil -o GSUtil:parallel_composite_upload_threshold=150M cp \
+! gsutil -o GSUtil:parallel_composite_upload_threshold=150M cp \
     target.tar.gz \
-    gs://notify-run-build-cache/renderer-target.tar.gz
+    gs://notify-run-build-cache/target.tar.gz
 
 mv target/release/notify-run ./
 rm -rf target

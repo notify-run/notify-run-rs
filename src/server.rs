@@ -207,12 +207,12 @@ fn static_routes() -> Router<BoxRoute> {
     Router::new()
         .nest(
             "/",
-            service::get(ServeDir::new("notify-run-site/public/"))
+            service::get(ServeDir::new("static/"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
         .nest(
             "/c/:channel_id",
-            service::get(ServeFile::new("notify-run-site/public/channel.html"))
+            service::get(ServeFile::new("static/channel.html"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
         .boxed()
