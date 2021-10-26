@@ -11,19 +11,22 @@ use axum::{
     http::StatusCode,
     AddExtensionLayer, Json, Router,
 };
+use base64::{Config, URL_SAFE};
 use chrono::{DateTime, Utc};
 use headers::{HeaderMap, HeaderName, HeaderValue, UserAgent};
 use qrcode::render::svg;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
+use std::io::Cursor;
 use std::net::SocketAddr;
 use tiny_firestore_odm::{Collection, NamedDocument};
 use tokio_stream::StreamExt;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
+use web_push::{ContentEncoding, SubscriptionInfo, VapidSignatureBuilder, WebPushClient, WebPushMessageBuilder};
 
 const MESSAGES_COLLECTION: &str = "messages";
-const SUBSCRIPTIONS_TABLE: &str = "subscriptions";
+const SUBSCRIPTIONS_COLLECTION: &str = "subscriptions";
 
 #[derive(Serialize)]
 struct VapidResult {
@@ -112,6 +115,14 @@ async fn info(
     }))
 }
 
+#[derive(Serialize)]
+struct MessagePayload {
+    message: String,
+    vibrate: bool,
+    silent: bool,
+    channel: String,
+}
+
 async fn send(
     server_state: Extension<ServerState>,
     Path(channel_id): Path<String>,
@@ -123,6 +134,42 @@ async fn send(
     let channels = db.channels();
     channels.get(&*channel_id).await.log_error_not_found()?;
 
+    // Send to subscriptions.
+
+    let subscriptions: Collection<Subscription> =
+        channels.subcollection(&channel_id, SUBSCRIPTIONS_COLLECTION);
+
+    let client = WebPushClient::new().log_error_internal()?;
+    let payload = MessagePayload {
+        channel: channel_id.to_string(),
+        vibrate: false,
+        silent: false,
+        message: message.clone(),
+    };
+    let payload_json = serde_json::to_string(&payload).unwrap();
+
+    for subscription in subscriptions.list().with_page_size(10).get_page().await {
+        let subscription_info = SubscriptionInfo::new(
+            subscription.value.endpoint,
+            subscription.value.p256dh,
+            subscription.value.auth,
+        );
+
+        let key = base64::decode_config(&server_state.vapid_privkey, URL_SAFE).log_error_internal()?;
+        let cursor = Cursor::new(&key);
+        let sig_builder = VapidSignatureBuilder::from_der_no_sub(cursor)
+            .log_error_internal()?;
+        
+        let signature = sig_builder.add_sub_info(&subscription_info).build().unwrap();
+
+        let mut builder = WebPushMessageBuilder::new(&subscription_info).log_error_internal()?;
+        builder.set_payload(ContentEncoding::Aes128Gcm, payload_json.as_bytes());
+        builder.set_vapid_signature(signature);
+
+        client.send(builder.build().log_error_internal()?).await.log_error_internal()?;
+    }
+
+    // Store message.
     let messages: Collection<Message> = channels.subcollection(&channel_id, MESSAGES_COLLECTION);
 
     messages
@@ -165,15 +212,22 @@ async fn subscribe(
     let channels = db.channels();
     channels.get(&*channel_id).await.log_error_not_found()?;
 
-    let subscriptions: Collection<Subscription> = channels.subcollection(&channel_id, SUBSCRIPTIONS_TABLE);
+    let subscriptions: Collection<Subscription> =
+        channels.subcollection(&channel_id, SUBSCRIPTIONS_COLLECTION);
 
     let subscription_id = subscription.id.clone();
 
-    subscriptions.try_create(&Subscription {
-        endpoint: subscription.0.subscription.endpoint,
-        auth: subscription.0.subscription.keys.auth,
-        p256dh: subscription.0.subscription.keys.p256dh,
-    }, &*subscription_id).await.log_error_internal()?;
+    subscriptions
+        .try_create(
+            &Subscription {
+                endpoint: subscription.0.subscription.endpoint,
+                auth: subscription.0.subscription.keys.auth,
+                p256dh: subscription.0.subscription.keys.p256dh,
+            },
+            &*subscription_id,
+        )
+        .await
+        .log_error_internal()?;
 
     Ok("".to_string())
 }

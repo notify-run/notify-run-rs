@@ -2,3 +2,4 @@
 export.json
 credentials.json
 .env
+/static

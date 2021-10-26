@@ -24,3 +24,5 @@ headers = "0.3.5"
 tower-http = { version = "0.1.1", features = ["fs", "trace"] }
 qrcode = "0.12.0"
 tokio-stream = "0.1.7"
+web-push = "0.9.1"
+base64 = "0.13.0"
