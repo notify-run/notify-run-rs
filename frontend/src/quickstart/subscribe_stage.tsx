@@ -66,7 +66,7 @@ export class SubscribeStage extends React.Component<SubscribeStageProps, Subscri
                     }
 
                     <pre>{`${Config.WEB_SERVER}/c/${this.props.channelId}\n`}</pre>
-                    <div style={{ lineHeight: 0 }}>&nbsp;</div>
+                    <div style={{ lineHeight: 0 }}></div>
                     <p>
                         {
                             this.state.supported ? (
