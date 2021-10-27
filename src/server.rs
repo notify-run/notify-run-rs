@@ -3,6 +3,7 @@ use crate::model::{Channel, Message, Subscription};
 use crate::server_state::ServerState;
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, TypedHeader};
+use axum::http::Response;
 use axum::routing::BoxRoute;
 use axum::service;
 use axum::{
@@ -23,7 +24,9 @@ use tiny_firestore_odm::{Collection, NamedDocument};
 use tokio_stream::StreamExt;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
-use web_push::{ContentEncoding, SubscriptionInfo, VapidSignatureBuilder, WebPushClient, WebPushMessageBuilder};
+use web_push::{
+    ContentEncoding, SubscriptionInfo, VapidSignatureBuilder, WebPushClient, WebPushMessageBuilder,
+};
 
 const MESSAGES_COLLECTION: &str = "messages";
 const SUBSCRIPTIONS_COLLECTION: &str = "subscriptions";
@@ -155,18 +158,24 @@ async fn send(
             subscription.value.auth,
         );
 
-        let key = base64::decode_config(&server_state.vapid_privkey, URL_SAFE).log_error_internal()?;
+        let key =
+            base64::decode_config(&server_state.vapid_privkey, URL_SAFE).log_error_internal()?;
         let cursor = Cursor::new(&key);
-        let sig_builder = VapidSignatureBuilder::from_der_no_sub(cursor)
-            .log_error_internal()?;
-        
-        let signature = sig_builder.add_sub_info(&subscription_info).build().unwrap();
+        let sig_builder = VapidSignatureBuilder::from_der_no_sub(cursor).log_error_internal()?;
+
+        let signature = sig_builder
+            .add_sub_info(&subscription_info)
+            .build()
+            .unwrap();
 
         let mut builder = WebPushMessageBuilder::new(&subscription_info).log_error_internal()?;
         builder.set_payload(ContentEncoding::Aes128Gcm, payload_json.as_bytes());
         builder.set_vapid_signature(signature);
 
-        client.send(builder.build().log_error_internal()?).await.log_error_internal()?;
+        client
+            .send(builder.build().log_error_internal()?)
+            .await
+            .log_error_internal()?;
     }
 
     // Store message.
@@ -261,6 +270,11 @@ fn static_routes() -> Router<BoxRoute> {
     Router::new()
         .nest(
             "/",
+            service::get(ServeFile::new("static/index.html"))
+                .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
+        )
+        .nest(
+            "/static",
             service::get(ServeDir::new("static/"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
@@ -270,6 +284,25 @@ fn static_routes() -> Router<BoxRoute> {
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
         .boxed()
+}
+
+pub async fn redirect(
+    server_state: Extension<ServerState>,
+    Path(channel_id): Path<String>,
+) -> Response<Body> {
+    if channel_id.len() > 6 && channel_id.chars().all(|c| char::is_ascii_alphanumeric(&c)) {
+        let new_location = format!("{}/c/{}", server_state.server_base, channel_id);
+        Response::builder()
+            .status(302)
+            .header(
+                HeaderName::from_static("location"),
+                HeaderValue::from_str(&new_location).unwrap()
+            )
+            .body(Body::empty())
+            .unwrap()
+    } else {
+        Response::builder().status(404).body(Body::empty()).unwrap()
+    }
 }
 
 pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
@@ -290,6 +323,7 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
         .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/api/register_channel", post(register_channel))
         .route("/:channel_id", post(send))
+        .route("/:channel_id", get(redirect))
         .layer(AddExtensionLayer::new(server_state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

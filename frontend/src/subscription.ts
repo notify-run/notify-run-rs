@@ -52,7 +52,7 @@ export class SubscriptionManager {
     }
 
     subscribe(channelId: string): Promise<void> {
-        return navigator.serviceWorker.register('/service-worker.js')
+        return navigator.serviceWorker.register('/static/service-worker.js')
             .then((registration) => {
                 const subscribeOptions = {
                     userVisibleOnly: true,
