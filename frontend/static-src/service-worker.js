@@ -14,9 +14,9 @@ self.addEventListener('push', function (event) {
     let options = {
         body: body,
         icon: '/icon.png',
-        tag: data.channel,
+        //tag: data.channel,
         data: data.data,
-        renotify: true,
+        //renotify: true,
         vibrate: data.vibrate,
         silent: data.silent
     };
