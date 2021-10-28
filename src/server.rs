@@ -1,9 +1,12 @@
 use crate::logging::LogError;
-use crate::model::{Channel, Message, Subscription};
+use crate::model::{
+    Channel, Message, MessageResult, Subscription, MESSAGES_COLLECTION, SUBSCRIPTIONS_COLLECTION,
+};
 use crate::server_state::ServerState;
+use crate::vapid::{send_message, MessagePayload};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, TypedHeader};
-use axum::http::Response;
+use axum::http::{Response, Uri};
 use axum::routing::BoxRoute;
 use axum::service;
 use axum::{
@@ -12,37 +15,21 @@ use axum::{
     http::StatusCode,
     AddExtensionLayer, Json, Router,
 };
-use base64::{Config, URL_SAFE};
 use chrono::{DateTime, Utc};
 use headers::{HeaderMap, HeaderName, HeaderValue, UserAgent};
 use qrcode::render::svg;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
-use std::io::Cursor;
 use std::net::SocketAddr;
-use tiny_firestore_odm::{Collection, NamedDocument};
-use tokio_stream::StreamExt;
+use std::str::FromStr;
+use tiny_firestore_odm::Collection;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
-use web_push::{
-    ContentEncoding, SubscriptionInfo, VapidSignatureBuilder, WebPushClient, WebPushMessageBuilder,
-};
-
-const MESSAGES_COLLECTION: &str = "messages";
-const SUBSCRIPTIONS_COLLECTION: &str = "subscriptions";
-
-#[derive(Serialize)]
-struct VapidResult {
-    endpoint_domain: String,
-    result_message: String,
-    result_status: String,
-    subscription: String,
-}
 
 #[derive(Serialize)]
 struct MessageInfo {
     message: String,
-    result: Vec<VapidResult>,
+    result: Vec<MessageResult>,
     time: DateTime<Utc>,
 }
 
@@ -92,7 +79,7 @@ async fn info(
     let db = server_state.db().await.log_error_internal()?;
 
     let channels = db.channels();
-    let channel = channels.get(&*channel_id).await.log_error_not_found()?;
+    channels.get(&*channel_id).await.log_error_not_found()?;
 
     let messages: Collection<Message> = channels.subcollection(&channel_id, MESSAGES_COLLECTION);
 
@@ -109,21 +96,13 @@ async fn info(
             .into_iter()
             .map(|d| MessageInfo {
                 message: d.value.message,
-                result: Vec::new(),
+                result: d.value.result,
                 time: d.value.message_time,
             })
             .collect(),
         time: "".to_string(),
         pub_key: server_state.vapid_pubkey.to_string(),
     }))
-}
-
-#[derive(Serialize)]
-struct MessagePayload {
-    message: String,
-    vibrate: bool,
-    silent: bool,
-    channel: String,
 }
 
 async fn send(
@@ -142,40 +121,27 @@ async fn send(
     let subscriptions: Collection<Subscription> =
         channels.subcollection(&channel_id, SUBSCRIPTIONS_COLLECTION);
 
-    let client = WebPushClient::new().log_error_internal()?;
-    let payload = MessagePayload {
-        channel: channel_id.to_string(),
-        vibrate: false,
-        silent: false,
-        message: message.clone(),
-    };
-    let payload_json = serde_json::to_string(&payload).unwrap();
+    let payload = MessagePayload::new(&message, &*channel_id);
+    let mut message_result = Vec::new();
 
     for subscription in subscriptions.list().with_page_size(10).get_page().await {
-        let subscription_info = SubscriptionInfo::new(
-            subscription.value.endpoint,
-            subscription.value.p256dh,
-            subscription.value.auth,
-        );
+        let result = send_message(&payload, &subscription.value, &server_state.vapid_privkey).await;
 
-        let key =
-            base64::decode_config(&server_state.vapid_privkey, URL_SAFE).log_error_internal()?;
-        let cursor = Cursor::new(&key);
-        let sig_builder = VapidSignatureBuilder::from_der_no_sub(cursor).log_error_internal()?;
+        let result_status = match result {
+            Ok(_) => "201".to_string(),
+            Err(e) => e.to_string(),
+        };
 
-        let signature = sig_builder
-            .add_sub_info(&subscription_info)
-            .build()
-            .unwrap();
+        let endpoint_domain = Uri::from_str(&subscription.value.endpoint)
+            .ok()
+            .map(|d| d.authority().map(|d| d.to_string()))
+            .flatten()
+            .unwrap_or_default();
 
-        let mut builder = WebPushMessageBuilder::new(&subscription_info).log_error_internal()?;
-        builder.set_payload(ContentEncoding::Aes128Gcm, payload_json.as_bytes());
-        builder.set_vapid_signature(signature);
-
-        client
-            .send(builder.build().log_error_internal()?)
-            .await
-            .log_error_internal()?;
+        message_result.push(MessageResult {
+            result_status,
+            endpoint_domain,
+        });
     }
 
     // Store message.
@@ -186,6 +152,7 @@ async fn send(
             message,
             message_time: Utc::now(),
             sender_ip: addr.ip().to_string(),
+            result: message_result,
         })
         .await
         .log_error_internal()?;
@@ -296,7 +263,7 @@ pub async fn redirect(
             .status(302)
             .header(
                 HeaderName::from_static("location"),
-                HeaderValue::from_str(&new_location).unwrap()
+                HeaderValue::from_str(&new_location).unwrap(),
             )
             .body(Body::empty())
             .unwrap()
@@ -322,8 +289,7 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
         .route("/:channel_id/subscribe", post(subscribe))
         .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/api/register_channel", post(register_channel))
-        .route("/:channel_id", post(send))
-        .route("/:channel_id", get(redirect))
+        .route("/:channel_id", get(redirect).post(send))
         .layer(AddExtensionLayer::new(server_state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

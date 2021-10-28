@@ -14,6 +14,7 @@ mod migrate;
 mod model;
 mod server;
 mod server_state;
+mod vapid;
 
 #[derive(Parser)]
 struct Opts {

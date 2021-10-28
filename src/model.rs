@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+pub const MESSAGES_COLLECTION: &str = "messages";
+pub const SUBSCRIPTIONS_COLLECTION: &str = "subscriptions";
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Subscription {
     pub endpoint: String,
@@ -24,4 +27,12 @@ pub struct Message {
 
     #[serde(with = "firestore_serde_timestamp::timestamp")]
     pub message_time: DateTime<Utc>,
+
+    pub result: Vec<MessageResult>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MessageResult {
+    pub endpoint_domain: String,
+    pub result_status: String,
 }
