@@ -3,6 +3,7 @@ import * as React from 'react';
 interface CreateChannelStageProps {
     onCreateChannel: () => void;
     loading: boolean;
+    error: boolean;
 }
 
 export class CreateChannelStage extends React.Component<CreateChannelStageProps, {}> {
@@ -13,7 +14,9 @@ export class CreateChannelStage extends React.Component<CreateChannelStageProps,
             </p>
             <button onClick={this.props.onCreateChannel} className="ui primary button">Create a Channel</button>
             {
-                this.props.loading ? <div className="ui mini active inline loader"></div> : ''
+                this.props.error ? (
+                    <div className="ui message error">Server error.</div>
+                ) : (this.props.loading ? <div className="ui mini active inline loader"></div> : null)
             }
         </div>;
     }

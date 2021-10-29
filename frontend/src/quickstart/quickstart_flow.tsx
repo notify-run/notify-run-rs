@@ -9,6 +9,7 @@ interface QuickStartFlowState {
     pubKey?: string,
     channelReady: boolean,
     loading: boolean,
+    error: boolean,
 }
 
 export class QuickStartFlow extends React.Component<{}, QuickStartFlowState> {
@@ -20,6 +21,7 @@ export class QuickStartFlow extends React.Component<{}, QuickStartFlowState> {
             pubKey: undefined,
             channelReady: false,
             loading: false,
+            error: false,
         };
     }
 
@@ -34,7 +36,7 @@ export class QuickStartFlow extends React.Component<{}, QuickStartFlowState> {
                 channelId: rcr.channelId,
                 pubKey: rcr.pubKey,
             })
-        });
+        }).catch(() => this.setState({error: true}));
     }
 
     channelReady() {
@@ -45,7 +47,7 @@ export class QuickStartFlow extends React.Component<{}, QuickStartFlowState> {
 
     render() {
         if (this.state.channelId === undefined || this.state.pubKey === undefined) {
-            return <CreateChannelStage onCreateChannel={this.createChannel.bind(this)} loading={this.state.loading} />;
+            return <CreateChannelStage onCreateChannel={this.createChannel.bind(this)} loading={this.state.loading} error={this.state.error} />;
         } else if (!this.state.channelReady) {
             return <SubscribeStage
                 pubKey={this.state.pubKey}
