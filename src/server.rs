@@ -171,7 +171,9 @@ async fn send(
     // let mut message_result = Vec::new();
     let mut futures = Vec::new();
 
-    for subscription in subscriptions.list().with_page_size(10).get_page().await {
+    let subscriptions = subscriptions.list().with_page_size(10).get_page().await;
+    let ls = subscriptions.len();
+    for subscription in subscriptions {
         futures.push(send_message_with_timeout(
             &payload,
             subscription.value,
@@ -180,7 +182,7 @@ async fn send(
         ));
     }
 
-    tracing::info!(num_futures=%futures.len(), "futures");
+    tracing::info!(%channel_id, num_futures=%futures.len(), num_subscriptions=%ls, "fsub");
 
     let message_result = join_all(futures.into_iter()).await;
 
