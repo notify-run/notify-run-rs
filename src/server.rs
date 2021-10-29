@@ -172,7 +172,6 @@ async fn send(
     let mut futures = Vec::new();
 
     let subscriptions = subscriptions.list().with_page_size(10).get_page().await;
-    let ls = subscriptions.len();
     for subscription in subscriptions {
         futures.push(send_message_with_timeout(
             &payload,
