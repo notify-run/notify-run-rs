@@ -7,8 +7,12 @@ self.addEventListener('notificationclick', function (event) {
 self.addEventListener('push', function (event) {
     let data = event.data.json();
 
+    let title_body = data.message.split('\n');
+    let title = title_body.shift();
+    let body = title_body.join('\n');
+
     let options = {
-        body: data.message,
+        body: body,
         icon: '/icon.png',
         //tag: data.channel,
         data: data.data,
@@ -19,6 +23,8 @@ self.addEventListener('push', function (event) {
 
     console.log(JSON.stringify(event.data.json()))
     console.log(JSON.stringify(options))
+
+    const promiseChain = self.registration.showNotification(title, options);
 
     event.waitUntil(promiseChain);
 });
