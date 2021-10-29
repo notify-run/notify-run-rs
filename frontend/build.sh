@@ -3,6 +3,8 @@
 cd "$(dirname "$0")"
 set -e
 
+export NODE_OPTIONS=--openssl-legacy-provider
+
 echo "Cleaning up old environment."
 rm -rf dist static public
 

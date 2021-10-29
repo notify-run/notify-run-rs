@@ -11,6 +11,7 @@ tar -xf target.tar.gz
 set -e
 
 # Run build -------------------------------
+cargo test --release
 cargo build --release
 
 # Sync up ---------------------------------
