@@ -1352,6 +1352,7 @@ dependencies = [
  "deadpool",
  "firestore-serde",
  "firestore-serde-timestamp",
+ "futures",
  "google-authz",
  "headers",
  "qrcode",

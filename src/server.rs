@@ -16,15 +16,20 @@ use axum::{
     AddExtensionLayer, Json, Router,
 };
 use chrono::{DateTime, Utc};
+use futures::future::join_all;
 use headers::{HeaderMap, HeaderName, HeaderValue, UserAgent};
 use qrcode::render::svg;
 use serde::{Deserialize, Serialize};
+use tokio::time::timeout;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::time::Duration;
 use tiny_firestore_odm::Collection;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
+
+const TIMEOUT_SECS: u64 = 5;
 
 #[derive(Serialize)]
 struct MessageInfo {
@@ -114,6 +119,26 @@ async fn info(
     }))
 }
 
+async fn send_message_with_timeout(payload: &MessagePayload, subscription: Subscription, privkey: &[u8], duration: Duration) -> MessageResult {
+    let result = timeout(duration, send_message(payload, &subscription, privkey)).await;
+
+    let result_status = match result {
+        Ok(_) => "201".to_string(),
+        Err(e) => e.to_string(),
+    };
+
+    let endpoint_domain = Uri::from_str(&subscription.endpoint)
+        .ok()
+        .map(|d| d.authority().map(|d| d.to_string()))
+        .flatten()
+        .unwrap_or_default();   
+
+    MessageResult {
+        result_status,
+        endpoint_domain,
+    }
+}
+
 async fn send(
     server_state: Extension<ServerState>,
     Path(channel_id): Path<String>,
@@ -135,27 +160,14 @@ async fn send(
         &*channel_id,
         &server_state.channel_page_url(&*channel_id),
     );
-    let mut message_result = Vec::new();
+    // let mut message_result = Vec::new();
+    let mut futures = Vec::new();
 
     for subscription in subscriptions.list().with_page_size(10).get_page().await {
-        let result = send_message(&payload, &subscription.value, &server_state.vapid_privkey).await;
-
-        let result_status = match result {
-            Ok(_) => "201".to_string(),
-            Err(e) => e.to_string(),
-        };
-
-        let endpoint_domain = Uri::from_str(&subscription.value.endpoint)
-            .ok()
-            .map(|d| d.authority().map(|d| d.to_string()))
-            .flatten()
-            .unwrap_or_default();
-
-        message_result.push(MessageResult {
-            result_status,
-            endpoint_domain,
-        });
+        futures.push(send_message_with_timeout(&payload, subscription.value, &server_state.vapid_privkey, Duration::from_secs(TIMEOUT_SECS)));
     }
+
+    let message_result = join_all(futures.into_iter()).await;
 
     // Store message.
     let messages: Collection<Message> = channels.subcollection(&channel_id, MESSAGES_COLLECTION);
