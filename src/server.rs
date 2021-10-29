@@ -222,7 +222,7 @@ async fn subscribe(
     subscription: Json<SubscriptionRequest>,
     server_state: Extension<ServerState>,
     Path(channel_id): Path<String>,
-) -> Result<String, StatusCode> {
+) -> Result<Json<()>, StatusCode> {
     let db = server_state.db().await.log_error_internal()?;
 
     let channels = db.channels();
@@ -245,7 +245,7 @@ async fn subscribe(
         .await
         .log_error_internal()?;
 
-    Ok("".to_string())
+    Ok(Json(()))
 }
 
 async fn render_qr_code(

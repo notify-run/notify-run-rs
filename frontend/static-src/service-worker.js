@@ -8,7 +8,7 @@ self.addEventListener('push', function (event) {
     let data = event.data.json();
 
     let options = {
-        body: title_body,
+        body: data.message,
         icon: '/icon.png',
         //tag: data.channel,
         data: data.data,
