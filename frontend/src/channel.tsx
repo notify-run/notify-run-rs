@@ -104,7 +104,7 @@ export class ChannelPage extends React.Component<ChannelPageProps, ChannelPageSt
             if (this.state.loading) {
                 this.setState({
                     loading: false,
-                    error: 'Error reaching API server.'
+                    error: reason.message,
                 })    
             }
         })

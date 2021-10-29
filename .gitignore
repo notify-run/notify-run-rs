@@ -3,3 +3,4 @@ export.json
 credentials.json
 .env
 /static
+.ipynb_checkpoints

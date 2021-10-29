@@ -44,6 +44,9 @@ struct ChannelInfo {
 
     #[serde(rename = "pubKey")]
     pub_key: String,
+
+    endpoint: String,
+    channel_page: String,
 }
 
 async fn register_channel(
@@ -62,13 +65,17 @@ async fn register_channel(
             created_ip: ip,
         })
         .await
-        .log_error_internal()?;
+        .log_error_internal()?
+        .leaf_name()
+        .to_string();
 
     Ok(Json(ChannelInfo {
-        channel_id: channel_id.leaf_name().to_string(),
         messages: Vec::new(),
         time: "".to_string(),
         pub_key: server_state.vapid_pubkey.to_string(),
+        endpoint: server_state.endpoint_url(&channel_id),
+        channel_page: server_state.channel_page_url(&channel_id),
+        channel_id: channel_id,
     }))
 }
 
@@ -91,7 +98,6 @@ async fn info(
         .await;
 
     Ok(Json(ChannelInfo {
-        channel_id,
         messages: messages
             .into_iter()
             .map(|d| MessageInfo {
@@ -102,6 +108,9 @@ async fn info(
             .collect(),
         time: "".to_string(),
         pub_key: server_state.vapid_pubkey.to_string(),
+        endpoint: server_state.endpoint_url(&channel_id),
+        channel_page: server_state.channel_page_url(&channel_id),
+        channel_id,
     }))
 }
 
@@ -121,7 +130,11 @@ async fn send(
     let subscriptions: Collection<Subscription> =
         channels.subcollection(&channel_id, SUBSCRIPTIONS_COLLECTION);
 
-    let payload = MessagePayload::new(&message, &*channel_id);
+    let payload = MessagePayload::parse_new(
+        &message,
+        &*channel_id,
+        &server_state.channel_page_url(&*channel_id),
+    );
     let mut message_result = Vec::new();
 
     for subscription in subscriptions.list().with_page_size(10).get_page().await {
@@ -149,7 +162,7 @@ async fn send(
 
     messages
         .create(&Message {
-            message,
+            message: payload.message.to_string(),
             message_time: Utc::now(),
             sender_ip: addr.ip().to_string(),
             result: message_result,
@@ -258,7 +271,7 @@ pub async fn redirect(
     Path(channel_id): Path<String>,
 ) -> Response<Body> {
     if channel_id.len() > 6 && channel_id.chars().all(|c| char::is_ascii_alphanumeric(&c)) {
-        let new_location = format!("{}/c/{}", server_state.server_base, channel_id);
+        let new_location = server_state.channel_page_url(&*channel_id);
         Response::builder()
             .status(302)
             .header(
@@ -285,11 +298,12 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
 
     let app = Router::new()
         .nest("/", static_routes())
+        .route("/:channel_id", get(redirect).post(send))
         .route("/:channel_id/json", get(info))
         .route("/:channel_id/subscribe", post(subscribe))
         .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/api/register_channel", post(register_channel))
-        .route("/:channel_id", get(redirect).post(send))
+        .route("/register_channel", post(register_channel)) // Used by py client.
         .layer(AddExtensionLayer::new(server_state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

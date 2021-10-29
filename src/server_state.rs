@@ -40,4 +40,12 @@ impl ServerState {
     pub async fn db(&self) -> Result<Object<NotifyDatabaseManager>, PoolError<Infallible>> {
         self.pool.get().await
     }
+
+    pub fn channel_page_url(&self, channel_id: &str) -> String {
+        format!("{}/c/{}", self.server_base, channel_id)
+    }
+
+    pub fn endpoint_url(&self, channel_id: &str) -> String {
+        format!("{}/{}", self.server_base, channel_id)
+    }
 }

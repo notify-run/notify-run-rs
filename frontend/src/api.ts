@@ -13,7 +13,15 @@ export type ChannelResponse = {
 
 export namespace NotifyAPI {
     function request(path: string, requestInit?: {}) {
-        return fetch(Config.API_SERVER + path, requestInit).then((c) => c.json());
+        return fetch(Config.API_SERVER + path, requestInit).then((c) => {
+            if (c.ok) {
+                return c.json()
+            } else if (c.status == 404) {
+                throw new Error("Not found.")
+            } else {
+                throw new Error("Error reaching API server.")
+            }            
+        });
     }
 
     export function registerChannel(): Promise<ChannelResponse> {

@@ -1326,6 +1326,7 @@ dependencies = [
  "qrcode",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "tiny-firestore-odm",
  "tokio",
  "tokio-stream",
