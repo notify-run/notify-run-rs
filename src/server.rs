@@ -20,12 +20,12 @@ use futures::future::join_all;
 use headers::{HeaderMap, HeaderName, HeaderValue, UserAgent};
 use qrcode::render::svg;
 use serde::{Deserialize, Serialize};
-use tokio::time::timeout;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::time::Duration;
 use tiny_firestore_odm::Collection;
+use tokio::time::timeout;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
 
@@ -73,7 +73,7 @@ async fn register_channel(
         .await
         .log_error_internal()?
         .leaf_name()
-        .to_string();  
+        .to_string();
 
     tracing::info!(%channel_id, %ip, "Channel created.");
 
@@ -122,7 +122,12 @@ async fn info(
     }))
 }
 
-async fn send_message_with_timeout(payload: &MessagePayload, subscription: Subscription, privkey: &[u8], duration: Duration) -> MessageResult {
+async fn send_message_with_timeout(
+    payload: &MessagePayload,
+    subscription: Subscription,
+    privkey: &[u8],
+    duration: Duration,
+) -> MessageResult {
     let result = timeout(duration, send_message(payload, &subscription, privkey)).await;
 
     let result_status = match result {
@@ -134,7 +139,7 @@ async fn send_message_with_timeout(payload: &MessagePayload, subscription: Subsc
         .ok()
         .map(|d| d.authority().map(|d| d.to_string()))
         .flatten()
-        .unwrap_or_default();   
+        .unwrap_or_default();
 
     MessageResult {
         result_status,
@@ -167,7 +172,12 @@ async fn send(
     let mut futures = Vec::new();
 
     for subscription in subscriptions.list().with_page_size(10).get_page().await {
-        futures.push(send_message_with_timeout(&payload, subscription.value, &server_state.vapid_privkey, Duration::from_secs(TIMEOUT_SECS)));
+        futures.push(send_message_with_timeout(
+            &payload,
+            subscription.value,
+            &server_state.vapid_privkey,
+            Duration::from_secs(TIMEOUT_SECS),
+        ));
     }
 
     let message_result = join_all(futures.into_iter()).await;
@@ -302,8 +312,25 @@ pub async fn redirect(
     }
 }
 
+/// Bad JavaScript clients access /undefined so frequently that we short-circuit it.
 pub async fn undefined() -> (StatusCode, &'static str) {
     (StatusCode::NOT_FOUND, "No such channel.")
+}
+
+/// The old service worker was not in the /static/ directory and still persists on some clients.
+pub async fn moved_service_worker(server_state: Extension<ServerState>) -> Response<Body> {
+    Response::builder()
+        .status(301)
+        .header(
+            HeaderName::from_static("location"),
+            HeaderValue::from_str(&format!(
+                "{}/static/service-worker.js",
+                server_state.server_base
+            ))
+            .unwrap(),
+        )
+        .body(Body::empty())
+        .unwrap()
 }
 
 pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
@@ -320,8 +347,8 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
     let app = Router::new()
         .nest("/", static_routes())
         .route("/:channel_id", get(redirect).post(send))
-        // Bad JavaScript clients access /undefined so frequently that we short-circuit it.
         .route("/undefined", get(undefined).post(undefined))
+        .route("/service-worker.js", get(moved_service_worker))
         .route("/:channel_id/json", get(info))
         .route("/:channel_id/subscribe", post(subscribe))
         .route("/:channel_id/qr.svg", get(render_qr_code))
