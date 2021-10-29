@@ -180,7 +180,7 @@ async fn send(
         ));
     }
 
-    tracing::info!(num_futures: futures.len(), "futures");
+    tracing::info!(%num_futures: futures.len(), "futures");
 
     let message_result = join_all(futures.into_iter()).await;
 
