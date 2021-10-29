@@ -63,16 +63,19 @@ async fn register_channel(
     let ip: String = addr.ip().to_string();
 
     let channels = db.channels();
+
     let channel_id = channels
         .create(&Channel {
             created: Utc::now(),
             created_agent: user_agent.to_string(),
-            created_ip: ip,
+            created_ip: ip.clone(),
         })
         .await
         .log_error_internal()?
         .leaf_name()
-        .to_string();
+        .to_string();  
+
+    tracing::info!(%channel_id, %ip, "Channel created.");
 
     Ok(Json(ChannelInfo {
         messages: Vec::new(),
@@ -168,6 +171,8 @@ async fn send(
     }
 
     let message_result = join_all(futures.into_iter()).await;
+
+    tracing::info!(%channel_id, ?message_result, "Message sent.");
 
     // Store message.
     let messages: Collection<Message> = channels.subcollection(&channel_id, MESSAGES_COLLECTION);
