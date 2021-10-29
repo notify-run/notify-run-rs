@@ -78,7 +78,7 @@ pub async fn migrate(path: PathBuf, db: Database) -> Result<()> {
         for (subscription_id, subscription) in item.subscriptions.value {
             let _span = tracing::info_span!("Subscription", %subscription_id).entered();
             let subscriptions: Collection<crate::model::Subscription> =
-                channels.subcollection(&channel_id, "susbcriptions");
+                channels.subcollection(&channel_id, "subscriptions");
 
             let sub = crate::model::Subscription {
                 endpoint: subscription.value.endpoint.value,

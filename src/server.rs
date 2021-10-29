@@ -162,7 +162,7 @@ async fn send(
 
     let subscriptions: Collection<Subscription> =
         channels.subcollection(&channel_id, SUBSCRIPTIONS_COLLECTION);
-
+    
     let payload = MessagePayload::parse_new(
         &message,
         &*channel_id,
@@ -181,8 +181,6 @@ async fn send(
             Duration::from_secs(TIMEOUT_SECS),
         ));
     }
-
-    tracing::info!(%channel_id, num_futures=%futures.len(), num_subscriptions=%ls, "fsub");
 
     let message_result = join_all(futures.into_iter()).await;
 
