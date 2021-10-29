@@ -302,6 +302,10 @@ pub async fn redirect(
     }
 }
 
+pub async fn undefined() -> (StatusCode, &'static str) {
+    (StatusCode::NOT_FOUND, "No such channel.")
+}
+
 pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
     let port: u16 = if let Some(port) = port {
         port
@@ -316,6 +320,8 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
     let app = Router::new()
         .nest("/", static_routes())
         .route("/:channel_id", get(redirect).post(send))
+        // Bad JavaScript clients access /undefined so frequently that we short-circuit it.
+        .route("/undefined", get(undefined).post(undefined))
         .route("/:channel_id/json", get(info))
         .route("/:channel_id/subscribe", post(subscribe))
         .route("/:channel_id/qr.svg", get(render_qr_code))
