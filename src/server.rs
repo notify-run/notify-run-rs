@@ -2,6 +2,7 @@ use crate::logging::LogError;
 use crate::model::{
     Channel, Message, MessageResult, Subscription, MESSAGES_COLLECTION, SUBSCRIPTIONS_COLLECTION,
 };
+use crate::rate_limiter::RateLimiterMiddleware;
 use crate::server_state::ServerState;
 use crate::vapid::{send_message, MessagePayload};
 use axum::body::{Body, Bytes};
@@ -17,7 +18,9 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
+use governor::Quota;
 use headers::{HeaderMap, HeaderName, HeaderValue, UserAgent};
+use nonzero_ext::nonzero;
 use qrcode::render::svg;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
@@ -26,10 +29,15 @@ use std::str::FromStr;
 use std::time::Duration;
 use tiny_firestore_odm::Collection;
 use tokio::time::timeout;
+use tower::layer::layer_fn;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
 
+/// Timeout (seconds) of external service when invoking push request.
 const TIMEOUT_SECS: u64 = 5;
+
+/// Rate limit on calls that access database.
+const MAX_REQUESTS_PER_MINUTE: u32 = 20;
 
 #[derive(Serialize)]
 struct MessageInfo {
@@ -83,7 +91,7 @@ async fn register_channel(
         pub_key: server_state.vapid_pubkey.to_string(),
         endpoint: server_state.endpoint_url(&channel_id),
         channel_page: server_state.channel_page_url(&channel_id),
-        channel_id: channel_id,
+        channel_id,
     }))
 }
 
@@ -162,7 +170,7 @@ async fn send(
 
     let subscriptions: Collection<Subscription> =
         channels.subcollection(&channel_id, SUBSCRIPTIONS_COLLECTION);
-    
+
     let payload = MessagePayload::parse_new(
         &message,
         &*channel_id,
@@ -334,6 +342,18 @@ pub async fn moved_service_worker(server_state: Extension<ServerState>) -> Respo
         .unwrap()
 }
 
+fn active_routes() -> Router<BoxRoute> {
+    Router::new()
+        .route("/:channel_id/json", get(info))
+        .route("/:channel_id/subscribe", post(subscribe))
+        .route("/api/register_channel", post(register_channel))
+        .route("/register_channel", post(register_channel)) // Used by py client.
+        .layer(layer_fn(|inner| {
+            RateLimiterMiddleware::new(inner, Quota::per_minute(nonzero!(MAX_REQUESTS_PER_MINUTE)))
+        }))
+        .boxed()
+}
+
 pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
     let port: u16 = if let Some(port) = port {
         port
@@ -350,11 +370,8 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
         .route("/:channel_id", get(redirect).post(send))
         .route("/undefined", get(undefined).post(undefined))
         .route("/service-worker.js", get(moved_service_worker))
-        .route("/:channel_id/json", get(info))
-        .route("/:channel_id/subscribe", post(subscribe))
         .route("/:channel_id/qr.svg", get(render_qr_code))
-        .route("/api/register_channel", post(register_channel))
-        .route("/register_channel", post(register_channel)) // Used by py client.
+        .nest("/", active_routes())
         .layer(AddExtensionLayer::new(server_state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

@@ -28,3 +28,7 @@ web-push = { version="0.9.1", features = ["hyper-client"] }
 base64 = "0.13.0"
 serde_urlencoded = "0.7.0"
 futures = "0.3.17"
+governor = "0.3.2"
+tower = "0.4.10"
+nonzero_ext = "0.3.0"
+http-body = "0.4.4"

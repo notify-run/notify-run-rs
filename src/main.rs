@@ -12,6 +12,7 @@ mod database;
 mod logging;
 mod migrate;
 mod model;
+mod rate_limiter;
 mod server;
 mod server_state;
 mod vapid;
