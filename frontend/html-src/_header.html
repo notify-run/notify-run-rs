@@ -23,3 +23,25 @@
                 <img src="/static/icon.svg" style="width: 56px; position: relative; bottom: 7px;" /> notify.run
             </h1>
         </a>
+
+        <div class="ui positive message">
+            <div class="header">
+                October 30, 2021 update: notify.run is back!
+              </div>    
+            <p>You may have noticed frequent outages over the last two weeks.
+                There was an uptick in usage which stressed the small but mighty infrastructure that powers
+                notify.run.
+            </p>
+        
+            <p>To keep pace with usage, I've overhauled the server:</p>
+            <ul>
+                <li>I <a href="https://github.com/notify-run/notify-run-rs">completely rewrote</a> the server in Rust.</li>
+                <li>I moved it from a single self-managed server to Google Cloud Run, which autoscales.</li>
+                <li>It now uses Firestore rather than DynamoDB, which had been a bottleneck.</li>
+                <li>I implemented an IP-based rate limit of 20 API calls per minute. The vast majority
+                    of users will never hit this limit, but they'll get more reliable service because of it.
+                </li>
+            </ul>
+
+            <p>-- Paul</p>
+        </div>

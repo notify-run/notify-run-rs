@@ -18,7 +18,7 @@
 </p>
 
 <p>
-    Each channel has its own HTTP(S) endpoint. When you
+    Each channel has its own HTTPS endpoint. When you
     <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST">POST</a> a message to that endpoint, notify.run relays it to every subscription on that channel.
 </p>
 <p>
@@ -77,16 +77,19 @@
 # model is a Keras model that you have created elsewhere.
 model.fit(x, y, callbacks=[NotifyCallback()])</pre>
 
-<h2>Self-hosting</h2>
+<h2>Open source</h2>
 
 <p>
     This public instance is freely provided for your convenience, but does not have an
     <a href="https://en.wikipedia.org/wiki/Service-level_agreement">SLA</a>
-    and should not be used for notification messages containing private data. For more demanding use cases, you may prefer to
-    run your own instance of the server on your own network.
+    and should not be used for notification messages containing private data.
+    Usage is tracked to prevent abuse, and rate limited to 20 API requests per minute.
 </p>
+
 <p>
-    To self-host, refer to <a href="https://github.com/notify-run/notify-run-server/blob/master/README.rst">these instructions</a> and let me know if you have any questions.
+    The <a href="https://github.com/notify-run/notify-run-rs">server</a> is written in Rust
+    and available under an MIT license. Self-hosting is possible, but is not a prioritized
+    use case.
 </p>
 
 <h2>Issues and Questions</h2>
