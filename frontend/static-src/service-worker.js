@@ -13,7 +13,7 @@ self.addEventListener('push', function (event) {
 
     let options = {
         body: body,
-        icon: '/icon.png',
+        icon: '/static/icon.png',
         //tag: data.channel,
         data: data.data,
         //renotify: true,
