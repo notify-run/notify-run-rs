@@ -33,6 +33,8 @@ FROM debian:bullseye-slim
 
 WORKDIR /work
 
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
+
 COPY --from=backend-builder /work/notify-run ./
 COPY --from=frontend-builder /work/public ./static
 
