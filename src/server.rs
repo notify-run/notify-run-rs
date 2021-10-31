@@ -141,7 +141,7 @@ async fn send_message_with_timeout(
     let result_status = match result {
         Ok(Ok(_)) => "201".to_string(),
         Ok(Err(e)) => e.to_string(),
-        Err(e) => "Timed out.".to_string(),
+        Err(_) => "Timed out.".to_string(),
     };
 
     let endpoint_domain = Uri::from_str(&subscription.endpoint)
