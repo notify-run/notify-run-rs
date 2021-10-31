@@ -1414,7 +1414,6 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
- "tracing-log",
  "tracing-stackdriver",
  "tracing-subscriber",
  "web-push",
