@@ -34,7 +34,7 @@ use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
 
 /// Timeout (seconds) of external service when invoking push request.
-const TIMEOUT_SECS: u64 = 5;
+const TIMEOUT_SECS: u64 = 10;
 
 /// Rate limit on calls that access database.
 const MAX_REQUESTS_PER_MINUTE: u32 = 20;
@@ -139,8 +139,9 @@ async fn send_message_with_timeout(
     let result = timeout(duration, send_message(payload, &subscription, privkey)).await;
 
     let result_status = match result {
-        Ok(_) => "201".to_string(),
-        Err(e) => e.to_string(),
+        Ok(Ok(_)) => "201".to_string(),
+        Ok(Err(e)) => e.to_string(),
+        Err(e) => "Timed out.".to_string(),
     };
 
     let endpoint_domain = Uri::from_str(&subscription.endpoint)

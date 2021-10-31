@@ -8,7 +8,10 @@ use tracing_subscriber::{EnvFilter, Registry};
 const LOG_MODULES: &[&str] = &["notify_run"];
 
 pub fn init_logging() {
+    tracing_log::LogTracer::init().unwrap();
+
     let mut env_filter = EnvFilter::default();
+    
     for module in LOG_MODULES {
         env_filter = env_filter.add_directive(
             format!("{}=info", module)
@@ -17,6 +20,11 @@ pub fn init_logging() {
         );
     }
 
+    //tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    let subscriber = tracing_subscriber::Registry::default()
+        .with(env_filter);
+
+    /*
     if std::env::var("LOG_JSON").is_ok() {
         let stackdriver = Stackdriver::default();
         let subscriber = Registry::default().with(stackdriver).with(env_filter);
@@ -26,6 +34,7 @@ pub fn init_logging() {
     } else {
         tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
+    */
 }
 
 pub type WebResult<T> = std::result::Result<T, StatusCode>;
