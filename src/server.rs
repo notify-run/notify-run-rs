@@ -37,7 +37,7 @@ use tower_http::services::ServeFile;
 const TIMEOUT_SECS: u64 = 10;
 
 /// Rate limit on calls that access database.
-const MAX_REQUESTS_PER_MINUTE: u32 = 20;
+const MAX_REQUESTS_PER_MINUTE: u32 = 5;
 
 #[derive(Serialize)]
 struct MessageInfo {
