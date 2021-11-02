@@ -284,7 +284,7 @@ async fn render_qr_code(
 
 fn static_routes() -> Router {
     Router::new()
-        .nest(
+        .route(
             "/",
             axum::routing::service_method_routing::get(ServeFile::new("static/index.html"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
@@ -341,13 +341,17 @@ pub async fn moved_service_worker(server_state: Extension<ServerState>) -> Respo
         .unwrap()
 }
 
-fn active_routes() -> Router {
+async fn active_routes() -> Router {
+    let server_state = ServerState::new().await;
+
     Router::new()
+        .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/:channel_id/json", get(info))
         .route("/:channel_id/subscribe", post(subscribe))
         .route("/api/register_channel", post(register_channel))
         .route("/register_channel", post(register_channel)) // Used by py client.
         .route("/:channel_id", get(redirect).post(send))
+        .layer(AddExtensionLayer::new(server_state))
         .layer(layer_fn(|inner| {
             RateLimiterMiddleware::new(inner, Quota::per_minute(nonzero!(MAX_REQUESTS_PER_MINUTE)))
         }))
@@ -362,15 +366,11 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
         8080
     };
 
-    let server_state = ServerState::new().await;
-
     let app = Router::new()
-        .nest("/", static_routes())
-        .nest("/", active_routes())
-        .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/undefined", get(undefined).post(undefined))
         .route("/service-worker.js", get(moved_service_worker))
-        .layer(AddExtensionLayer::new(server_state));
+        .merge(active_routes().await)
+        .fallback(static_routes());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {}", addr);
