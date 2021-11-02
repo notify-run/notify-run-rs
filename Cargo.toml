@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.44"
 async-trait = "0.1.51"
-axum = { version = "0.2.8", features = ["headers"] }
+axum = { version = "0.3.0", features = ["headers"] }
 base64 = "0.13.0"
 chrono = "0.4.19"
 clap = "3.0.0-beta.5"

@@ -8,13 +8,12 @@ use crate::vapid::{send_message, MessagePayload};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, TypedHeader};
 use axum::http::{Response, Uri};
-use axum::routing::BoxRoute;
-use axum::service;
 use axum::{
     extract::{Extension, Path},
-    handler::{get, post},
+    routing::{get, post},
     http::StatusCode,
     AddExtensionLayer, Json, Router,
+    error_handling::HandleErrorExt,
 };
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
@@ -283,24 +282,23 @@ async fn render_qr_code(
     (headers, b)
 }
 
-fn static_routes() -> Router<BoxRoute> {
+fn static_routes() -> Router {
     Router::new()
         .nest(
             "/",
-            service::get(ServeFile::new("static/index.html"))
+            axum::routing::service_method_routing::get(ServeFile::new("static/index.html"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
         .nest(
             "/static",
-            service::get(ServeDir::new("static/"))
+            axum::routing::service_method_routing::get(ServeDir::new("static/"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
         .nest(
             "/c/:channel_id",
-            service::get(ServeFile::new("static/channel.html"))
+            axum::routing::service_method_routing::get(ServeFile::new("static/channel.html"))
                 .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND)),
         )
-        .boxed()
 }
 
 pub async fn redirect(
@@ -343,7 +341,7 @@ pub async fn moved_service_worker(server_state: Extension<ServerState>) -> Respo
         .unwrap()
 }
 
-fn active_routes() -> Router<BoxRoute> {
+fn active_routes() -> Router {
     Router::new()
         .route("/:channel_id/json", get(info))
         .route("/:channel_id/subscribe", post(subscribe))
@@ -353,7 +351,6 @@ fn active_routes() -> Router<BoxRoute> {
         .layer(layer_fn(|inner| {
             RateLimiterMiddleware::new(inner, Quota::per_minute(nonzero!(MAX_REQUESTS_PER_MINUTE)))
         }))
-        .boxed()
 }
 
 pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
