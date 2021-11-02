@@ -345,6 +345,7 @@ async fn active_routes() -> Router {
     let server_state = ServerState::new().await;
 
     Router::new()
+        .route("/service-worker.js", get(moved_service_worker))
         .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/:channel_id/json", get(info))
         .route("/:channel_id/subscribe", post(subscribe))
@@ -368,7 +369,6 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/undefined", get(undefined).post(undefined))
-        .route("/service-worker.js", get(moved_service_worker))
         .merge(active_routes().await)
         .fallback(static_routes());
 
