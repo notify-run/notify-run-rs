@@ -4,31 +4,31 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0.44"
+async-trait = "0.1.51"
+axum = { version = "0.2.8", features = ["headers"] }
+base64 = "0.13.0"
 chrono = "0.4.19"
+clap = "3.0.0-beta.5"
+deadpool = { version = "0.9.0", features = ["managed"] }
 firestore-serde = "0.1.1"
 firestore-serde-timestamp = "0.1.0"
-serde = { version = "1.0.130", features = ["derive"] }
-clap = "3.0.0-beta.5"
-serde_json = "1.0.68"
-anyhow = "1.0.44"
-tiny-firestore-odm = "0.2.6"
-google-authz = "0.0.2"
-tokio = { version = "1.12.0", features = ["rt-multi-thread", "time"] }
-tracing = "0.1.29"
-tracing-subscriber = "0.2.25"
-tracing-stackdriver = "0.2.0"
-axum = { version = "0.2.8", features = ["headers"] }
-deadpool = { version = "0.9.0", features = ["managed"] }
-async-trait = "0.1.51"
-headers = "0.3.5"
-tower-http = { version = "0.1.1", features = ["fs", "trace"] }
-qrcode = "0.12.0"
-tokio-stream = "0.1.7"
-web-push = { version="0.9.1", features = ["hyper-client"] }
-base64 = "0.13.0"
-serde_urlencoded = "0.7.0"
 futures = "0.3.17"
+google-authz = "0.0.2"
 governor = "0.3.2"
-tower = "0.4.10"
-nonzero_ext = "0.3.0"
+headers = "0.3.5"
 http-body = "0.4.4"
+nonzero_ext = "0.3.0"
+qrcode = "0.12.0"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.68"
+serde_urlencoded = "0.7.0"
+tiny-firestore-odm = "0.2.6"
+tokio = { version = "1.12.0", features = ["rt-multi-thread", "time"] }
+tokio-stream = "0.1.7"
+tower = "0.4.10"
+tower-http = { version = "0.1.1", features = ["fs", "trace"] }
+tracing = "0.1.29"
+tracing-stackdriver = "0.2.0"
+tracing-subscriber = "0.2.25"
+web-push = { version="0.9.1", features = ["hyper-client"] }
