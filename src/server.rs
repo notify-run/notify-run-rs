@@ -37,7 +37,7 @@ use tower_http::services::ServeFile;
 const TIMEOUT_SECS: u64 = 10;
 
 /// Rate limit on calls that access database.
-const MAX_REQUESTS_PER_MINUTE: u32 = 5;
+const MAX_REQUESTS_PER_MINUTE: u32 = 10;
 
 #[derive(Serialize)]
 struct MessageInfo {
@@ -349,6 +349,7 @@ fn active_routes() -> Router<BoxRoute> {
         .route("/:channel_id/subscribe", post(subscribe))
         .route("/api/register_channel", post(register_channel))
         .route("/register_channel", post(register_channel)) // Used by py client.
+        .route("/:channel_id", get(redirect).post(send))
         .layer(layer_fn(|inner| {
             RateLimiterMiddleware::new(inner, Quota::per_minute(nonzero!(MAX_REQUESTS_PER_MINUTE)))
         }))
@@ -368,11 +369,10 @@ pub async fn serve(port: Option<u16>) -> anyhow::Result<()> {
 
     let app = Router::new()
         .nest("/", static_routes())
-        .route("/:channel_id", get(redirect).post(send))
+        .nest("/", active_routes())
+        .route("/:channel_id/qr.svg", get(render_qr_code))
         .route("/undefined", get(undefined).post(undefined))
         .route("/service-worker.js", get(moved_service_worker))
-        .route("/:channel_id/qr.svg", get(render_qr_code))
-        .nest("/", active_routes())
         .layer(AddExtensionLayer::new(server_state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
