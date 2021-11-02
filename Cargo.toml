@@ -31,4 +31,4 @@ tower-http = { version = "0.1.1", features = ["fs", "trace"] }
 tracing = "0.1.29"
 tracing-stackdriver = "0.2.0"
 tracing-subscriber = "0.2.25"
-web-push = { version="0.9.1", features = ["hyper-client"] }
+web-push = { version="0.9.1", features = ["hyper-client"], default_features=false }
