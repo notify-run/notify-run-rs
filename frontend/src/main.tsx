@@ -13,7 +13,7 @@ window.addEventListener('load', () => {
         );
     }
 
-    let match = document.location.pathname.match('/c/(.+)');
+    let match = document.location.pathname.match('/c/(A-Za-z0-9+)/?');
     if (match) {
         let channelId = match[1];
         let channelContainer = document.getElementById('channel');
