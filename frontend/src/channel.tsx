@@ -115,7 +115,7 @@ export class ChannelPage extends React.Component<ChannelPageProps, ChannelPageSt
 
         this.loadChannel();
 
-        //setInterval(this.loadChannel.bind(this), 30 * 1000);
+        setInterval(this.loadChannel.bind(this), 30 * 1000);
     }
 
     onSubscribe() {
